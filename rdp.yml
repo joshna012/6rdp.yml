@@ -74,6 +74,23 @@ jobs:
           if ($crd.Length -gt 0) { "CRD_ENABLED=1" | Out-File -Append $env:GITHUB_ENV } else { "CRD_ENABLED=0" | Out-File -Append $env:GITHUB_ENV }
           Write-Host "CRD_ENABLED=$([int]($crd.Length -gt 0))"
 
+      - name: Enable Sound & Install Virtual Audio Cable
+        run: |
+          Write-Host "Starting Windows Audio Service..."
+          Set-Service -Name Audiosrv -StartupType Automatic
+          Start-Service -Name Audiosrv -ErrorAction SilentlyContinue
+
+          Write-Host "Downloading VB-CABLE Virtual Audio Device..."
+          $vbUrl = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip"
+          $zipPath = "$env:TEMP\VBCABLE.zip"
+          $extractPath = "$env:TEMP\VBCABLE"
+          Invoke-WebRequest -Uri $vbUrl -OutFile $zipPath -UseBasicParsing
+          Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+
+          Write-Host "Installing VB-CABLE silently..."
+          Start-Process -FilePath "$extractPath\VBCABLE_Setup_x64.exe" -ArgumentList "-i", "-h" -Wait
+          Write-Host "Sound successfully enabled!"
+
       - name: Install Chrome Remote Desktop Host (if missing)  # EXE -> MSI fallback
         if: env.CRD_ENABLED == '1'
         run: |
