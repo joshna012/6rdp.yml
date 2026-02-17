@@ -76,7 +76,9 @@ jobs:
 
       - name: Enable Sound & Install Virtual Audio Cable
         run: |
-          Write-Host "Starting Windows Audio Service..."
+          Write-Host "Starting Audio Services..."
+          Set-Service -Name AudioEndpointBuilder -StartupType Automatic
+          Start-Service -Name AudioEndpointBuilder -ErrorAction SilentlyContinue
           Set-Service -Name Audiosrv -StartupType Automatic
           Start-Service -Name Audiosrv -ErrorAction SilentlyContinue
 
@@ -84,12 +86,26 @@ jobs:
           $vbUrl = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip"
           $zipPath = "$env:TEMP\VBCABLE.zip"
           $extractPath = "$env:TEMP\VBCABLE"
+          
+          if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
+          
           Invoke-WebRequest -Uri $vbUrl -OutFile $zipPath -UseBasicParsing
           Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
 
           Write-Host "Installing VB-CABLE silently..."
-          Start-Process -FilePath "$extractPath\VBCABLE_Setup_x64.exe" -ArgumentList "-i", "-h" -Wait
-          Write-Host "Sound successfully enabled!"
+          Set-Location -Path $extractPath
+          
+          $installProcess = Start-Process -FilePath ".\VBCABLE_Setup_x64.exe" -ArgumentList "-i", "-h" -Wait -PassThru -NoNewWindow
+          
+          if ($installProcess.ExitCode -ne 0) {
+              Write-Host "EXE installer returned $($installProcess.ExitCode). Forcing driver injection via pnputil..."
+              pnputil.exe /add-driver VBCABLE.inf /install
+          } else {
+              Write-Host "VB-CABLE EXE installer reported success."
+          }
+
+          Start-Sleep -Seconds 10
+          Write-Host "Sound setup complete!"
 
       - name: Install Chrome Remote Desktop Host (if missing)  # EXE -> MSI fallback
         if: env.CRD_ENABLED == '1'
