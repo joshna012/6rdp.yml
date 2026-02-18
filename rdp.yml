@@ -64,8 +64,8 @@ jobs:
       RDP_USER: Bullettemporary
       RDP_PASS: Bullet@12345
       # HARDCODED CREDENTIALS - REPLACE THESE VALUES
-      TS_TAILNET_VAL: "YOUR_TAILNET_EMAIL_HERE" 
-      TS_API_KEY_VAL: "YOUR_API_KEY_HERE"
+      TS_TAILNET_VAL: "joshna012@github" 
+      TS_API_KEY_VAL: "tskey-api-kuLzy8Qcg711CNTRL-kDaKVfcdM58YSeczmnty48o7Es3VpJ1e"
 
     steps:
       - name: Set CRD flag early (safe read)
