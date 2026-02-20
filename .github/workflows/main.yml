@@ -284,7 +284,7 @@ jobs:
           if (-not (Test-Path $rdExe)) { Write-Error "RustDesk not found after install"; exit 1 }
           Write-Host "RustDesk installed."
 
-      - name: Download and Install GoLogin (Robust)
+      - name: Download and Install GoLogin (Fixed for RDP User)
         run: |
           Write-Host "Downloading GoLogin..."
           $goLoginUrl = "https://dl.gologin.com/gologin.exe"
@@ -292,24 +292,23 @@ jobs:
           Invoke-WebRequest -Uri $goLoginUrl -OutFile $goLoginExe -UseBasicParsing
           
           Write-Host "Executing GoLogin installer..."
-          Start-Process -FilePath $goLoginExe -ArgumentList "/S", "--silent" -NoNewWindow
+          Start-Process -FilePath $goLoginExe -ArgumentList "/S" -NoNewWindow
           
-          Write-Host "Waiting for GoLogin to extract and install..."
+          Write-Host "Waiting for GoLogin to extract..."
           $installPaths = @(
-              "$env:LOCALAPPDATA\Programs\GoLogin\GoLogin.exe",
-              "$env:APPDATA\GoLogin\GoLogin.exe",
-              "C:\Program Files\GoLogin\GoLogin.exe",
-              "C:\Program Files (x86)\GoLogin\GoLogin.exe",
               "C:\Users\runneradmin\AppData\Local\Programs\GoLogin\GoLogin.exe",
-              "C:\Users\runneradmin\AppData\Roaming\GoLogin\GoLogin.exe"
+              "$env:LOCALAPPDATA\Programs\GoLogin\GoLogin.exe",
+              "C:\Program Files\GoLogin\GoLogin.exe",
+              "C:\Program Files (x86)\GoLogin\GoLogin.exe"
           )
           
           $installed = $false
+          $foundPath = ""
           for ($i = 0; $i -lt 30; $i++) {
               foreach ($path in $installPaths) {
                   if (Test-Path $path) {
                       $installed = $true
-                      Write-Host "Success! Found GoLogin installed at: $path"
+                      $foundPath = $path
                       break
                   }
               }
@@ -318,18 +317,31 @@ jobs:
           }
           
           if (-not $installed) {
-              Write-Error "GoLogin failed to install within the timeout period."
+              Write-Error "GoLogin failed to install within the timeout."
               exit 1
           }
           
-          Write-Host "Cleaning up installer..."
-          # Force kill the installer process if it is still lingering in the background
+          Write-Host "Cleaning up installer processes to release file locks..."
           Get-Process -Name "gologin" -ErrorAction SilentlyContinue | Stop-Process -Force
-          Start-Sleep -Seconds 2
+          Start-Sleep -Seconds 3
           
-          # Attempt to remove the file, but silently continue if Windows still has it locked
+          Write-Host "Moving GoLogin to C:\GoLogin so RDP user can see it..."
+          $sourceDir = Split-Path $foundPath
+          $publicDir = "C:\GoLogin"
+          
+          New-Item -ItemType Directory -Force -Path $publicDir | Out-Null
+          Copy-Item -Path "$sourceDir\*" -Destination $publicDir -Recurse -Force -ErrorAction SilentlyContinue
+          $finalExe = "$publicDir\GoLogin.exe"
+          
+          Write-Host "Creating Desktop Shortcut..."
+          $WshShell = New-Object -comObject WScript.Shell
+          $Shortcut = $WshShell.CreateShortcut("C:\Users\Public\Desktop\GoLogin.lnk")
+          $Shortcut.TargetPath = $finalExe
+          $Shortcut.WorkingDirectory = $publicDir
+          $Shortcut.Save()
+          
           Remove-Item $goLoginExe -Force -ErrorAction SilentlyContinue
-          Write-Host "GoLogin setup complete!"
+          Write-Host "GoLogin setup complete! Shortcut placed on Public Desktop."
 
       - name: Open RustDesk ports (TCP 21115-21119, UDP 21116)
         run: |
@@ -382,26 +394,4 @@ jobs:
             $next = $cycles - 1
             if ($next -le 0) {
               $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/rdp-tailscale-stop.yml/dispatches"
-              $hdr = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" }
-              $payload = @{ ts_tailnet="$env:TS_TAILNET_VAL"; ts_api_key="$env:TS_API_KEY_VAL"; base_prefix="bullet"; max_count="10"; dry_run="false" }
-              $body = @{ ref="${{ github.ref_name }}"; inputs=$payload } | ConvertTo-Json -Depth 20
-              Invoke-WebRequest -Method POST -Uri $url -Headers $hdr -Body $body | Out-Null
-              Write-Host "Dispatched STOP."
-            } else {
-              $payload = @{
-                ts_authkey      = "${{ inputs.ts_authkey }}"
-                quick_test      = "${{ inputs.quick_test }}"
-                runtime_minutes = "${{ inputs.runtime_minutes }}"
-                do_purge        = "${{ inputs.do_purge }}"
-                cycles          = "$next"
-                rdp_count       = "${{ inputs.rdp_count }}"
-                crd_code        = "${{ inputs.crd_code }}"
-                crd_pin         = "${{ inputs.crd_pin }}"
-              }
-              $url2 = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/rdp-tailscale-B.yml/dispatches"
-              $hdr2 = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" }
-              $body2 = @{ ref="${{ github.ref_name }}"; inputs=$payload } | ConvertTo-Json -Depth 20
-              Invoke-WebRequest -Method POST -Uri $url2 -Headers $hdr2 -Body $body2 | Out-Null
-              Write-Host "Dispatched Workflow B with cycles=$next"
-            }
-          } else { Write-Host "No cycles configured. Done." }
+              $hdr = @{ Authorization = "Bearer $env:
