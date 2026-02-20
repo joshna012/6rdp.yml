@@ -108,7 +108,7 @@ jobs:
           Start-Sleep -Seconds 10
           Write-Host "Sound setup complete!"
 
-      - name: Install Chrome Remote Desktop Host (if missing)  # EXE -> MSI fallback
+      - name: Install Chrome Remote Desktop Host (if missing)
         if: env.CRD_ENABLED == '1'
         run: |
           $exe = "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
@@ -322,7 +322,14 @@ jobs:
               exit 1
           }
           
-          Remove-Item $goLoginExe -Force
+          Write-Host "Cleaning up installer..."
+          # Force kill the installer process if it is still lingering in the background
+          Get-Process -Name "gologin" -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 2
+          
+          # Attempt to remove the file, but silently continue if Windows still has it locked
+          Remove-Item $goLoginExe -Force -ErrorAction SilentlyContinue
+          Write-Host "GoLogin setup complete!"
 
       - name: Open RustDesk ports (TCP 21115-21119, UDP 21116)
         run: |
