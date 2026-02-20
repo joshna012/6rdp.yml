@@ -285,6 +285,19 @@ jobs:
           if (-not (Test-Path $rdExe)) { Write-Error "RustDesk not found after install"; exit 1 }
           Write-Host "RustDesk installed."
 
+      - name: Download and Install GoLogin
+        run: |
+          Write-Host "Downloading GoLogin..."
+          $goLoginUrl = "https://dl.gologin.com/gologin.exe"
+          $goLoginExe = "$env:TEMP\gologin.exe"
+          Invoke-WebRequest -Uri $goLoginUrl -OutFile $goLoginExe -UseBasicParsing
+          
+          Write-Host "Installing GoLogin silently..."
+          # Running the installer silently. It will usually install to AppData or Program Files.
+          Start-Process -FilePath $goLoginExe -ArgumentList "/S" -Wait -NoNewWindow
+          
+          Write-Host "GoLogin installation complete. You can access it from the desktop or Start Menu inside the RDP session."
+
       - name: Open RustDesk ports (TCP 21115-21119, UDP 21116)
         run: |
           for ($p=21115; $p -le 21119; $p++) {
