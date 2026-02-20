@@ -3,7 +3,6 @@ name: RDP + Tailscale + RustDesk + (Optional) Chrome Remote Desktop (B)
 on:
   workflow_dispatch:
     inputs:
-      # ts_tailnet and ts_api_key removed from inputs
       ts_authkey:         { description: "Tailscale Auth key (reusable or ephemeral)", required: true }
       quick_test:         { description: "Run 5-minute test", type: boolean, default: false }
       runtime_minutes:    { description: "Runtime (max 360; default 355 when not test)", required: false, default: "355" }
@@ -63,7 +62,7 @@ jobs:
     env:
       RDP_USER: Bullettemporary
       RDP_PASS: Bullet@12345
-      # HARDCODED CREDENTIALS - REPLACE THESE VALUES
+      # HARDCODED CREDENTIALS - REPLACE THESE VALUES OR USE GITHUB SECRETS
       TS_TAILNET_VAL: "joshna012@github" 
       TS_API_KEY_VAL: "tskey-api-kuLzy8Qcg711CNTRL-kDaKVfcdM58YSeczmnty48o7Es3VpJ1e"
 
@@ -285,6 +284,46 @@ jobs:
           if (-not (Test-Path $rdExe)) { Write-Error "RustDesk not found after install"; exit 1 }
           Write-Host "RustDesk installed."
 
+      - name: Download and Install GoLogin (Robust)
+        run: |
+          Write-Host "Downloading GoLogin..."
+          $goLoginUrl = "https://dl.gologin.com/gologin.exe"
+          $goLoginExe = "$env:TEMP\gologin.exe"
+          Invoke-WebRequest -Uri $goLoginUrl -OutFile $goLoginExe -UseBasicParsing
+          
+          Write-Host "Executing GoLogin installer..."
+          Start-Process -FilePath $goLoginExe -ArgumentList "/S", "--silent" -NoNewWindow
+          
+          Write-Host "Waiting for GoLogin to extract and install..."
+          $installPaths = @(
+              "$env:LOCALAPPDATA\Programs\GoLogin\GoLogin.exe",
+              "$env:APPDATA\GoLogin\GoLogin.exe",
+              "C:\Program Files\GoLogin\GoLogin.exe",
+              "C:\Program Files (x86)\GoLogin\GoLogin.exe",
+              "C:\Users\runneradmin\AppData\Local\Programs\GoLogin\GoLogin.exe",
+              "C:\Users\runneradmin\AppData\Roaming\GoLogin\GoLogin.exe"
+          )
+          
+          $installed = $false
+          for ($i = 0; $i -lt 30; $i++) {
+              foreach ($path in $installPaths) {
+                  if (Test-Path $path) {
+                      $installed = $true
+                      Write-Host "Success! Found GoLogin installed at: $path"
+                      break
+                  }
+              }
+              if ($installed) { break }
+              Start-Sleep -Seconds 2
+          }
+          
+          if (-not $installed) {
+              Write-Error "GoLogin failed to install within the timeout period."
+              exit 1
+          }
+          
+          Remove-Item $goLoginExe -Force
+
       - name: Open RustDesk ports (TCP 21115-21119, UDP 21116)
         run: |
           for ($p=21115; $p -le 21119; $p++) {
@@ -337,14 +376,12 @@ jobs:
             if ($next -le 0) {
               $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/rdp-tailscale-stop.yml/dispatches"
               $hdr = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" }
-              # Assuming stop workflow still needs these credentials
               $payload = @{ ts_tailnet="$env:TS_TAILNET_VAL"; ts_api_key="$env:TS_API_KEY_VAL"; base_prefix="bullet"; max_count="10"; dry_run="false" }
               $body = @{ ref="${{ github.ref_name }}"; inputs=$payload } | ConvertTo-Json -Depth 20
               Invoke-WebRequest -Method POST -Uri $url -Headers $hdr -Body $body | Out-Null
               Write-Host "Dispatched STOP."
             } else {
               $payload = @{
-                # ts_tailnet and ts_api_key REMOVED here because the next run uses hardcoded env vars
                 ts_authkey      = "${{ inputs.ts_authkey }}"
                 quick_test      = "${{ inputs.quick_test }}"
                 runtime_minutes = "${{ inputs.runtime_minutes }}"
